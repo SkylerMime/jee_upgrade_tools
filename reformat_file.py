@@ -19,7 +19,45 @@ def reformat_file(file_path: str):
 
 
 # Replace old ui-g style classes
-def 
+def ui_g_to_p_grid(old_file: str):
+    """
+    >>> ui_g_to_p_grid('    <div class="ui-g-12 ui-sm-12 ui-md-8 ui-lg-6 ui-xl-3">')
+    '    <div class="p-col-12 p-sm-12 p-md-8 p-lg-6 p-xl-3">'
+    """
+    last_change = old_file
+    result = last_change
+    while result is not None:
+        last_change = result
+        result = _replace_ui_g_element(last_change)
+    result = last_change
+    while result is not None:
+        last_change = result
+        result = _replace_ui_num_element(last_change)
+    return last_change
+
+def _replace_ui_g_element(old_file: str):
+    """
+    >>> _replace_ui_g_element('<div class="ui-g-8 ui-md-6">')
+    '<div class="p-col-8 ui-md-6">'
+    """
+    first_part, _, last_part = old_file.partition("ui-g")
+    if last_part == "":
+        return None
+    elif last_part[0] == '-':
+        # This is a length element like ui-g-12, not the grid definition ui-g.
+        return f'{first_part}p-col{last_part}'
+    else:
+        return f'{first_part}p-grid{last_part}'
+    
+def _replace_ui_num_element(old_file: str):
+    """
+    >>> _replace_ui_num_element('<div class="ui-lg-5">')
+    '<div class="p-lg-5">'
+    """
+    first_part, _, last_part = old_file.partition("ui-")
+    if last_part == "":
+        return None
+    return f'{first_part}p-{last_part}'
 
 
 # Replace ObjectUtils with Objects

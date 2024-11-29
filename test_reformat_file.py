@@ -19,13 +19,12 @@ secondline;
 test.add("First " + Objects.toString(secondVariable.method(more()).more(), "")).more();
 """
 
-def test_reformat_sample_file():
+def run_reformat_test_on(file_name: str, file_data: str):
     TEST_FILE_DIRECTORY = './testfiles'
-    TEST_FILE_NAME = 'test.txt'
+    TEST_FILE_NAME = file_name
     TEST_FILE_PATH = TEST_FILE_DIRECTORY + '/' + TEST_FILE_NAME
 
-    file_to_remove = pathlib.Path(TEST_FILE_PATH)
-    if file_to_remove.exists():
+    for file_to_remove in pathlib.Path(TEST_FILE_DIRECTORY).iterdir():
         file_to_remove.unlink()
 
     directory_to_remove = pathlib.Path(TEST_FILE_DIRECTORY)
@@ -35,14 +34,33 @@ def test_reformat_sample_file():
     pathlib.Path('./testfiles').mkdir()
 
     with open(TEST_FILE_PATH, mode="x", encoding="UTF-8") as test_file:
-        test_file.write(OBJECT_UTIL_REPEATED)
+        test_file.write(file_data)
     
     reformat_file(TEST_FILE_PATH)
 
+    result = ''
     with open(TEST_FILE_PATH, encoding="UTF-8") as test_file:
         result = test_file.read()
+
+    return result
+
+def test_reformat_java_file():
+    result = run_reformat_test_on('test.java', OBJECT_UTIL_REPEATED)
     
     assert result == OBJECT_UTIL_REPEATED_EXPECTED
+
+def test_reformat_xhtml_file():
+    UI_G_TEST_INPUT = """
+<div class="ui-g">
+    <div class="ui-g-12 ui-md-12 ui-lg-12 ui-xl-6" style="margin-left:-5px">
+"""
+
+    UI_G_EXPECTED_OUTPUT = """
+<div class="p-grid">
+    <div class="p-col-12 p-md-12 p-lg-12 p-xl-6" style="margin-left:-5px">
+"""
+
+    assert run_reformat_test_on('test.xhtml', UI_G_TEST_INPUT) == UI_G_EXPECTED_OUTPUT
 
 def test_object_util():
     OBJECT_UTIL_TEST_INPUT = """
