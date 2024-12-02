@@ -1,5 +1,6 @@
 import sys
 import pathlib
+from collections.abc import Callable
 
 # Run the reformatter on the given file
 def main():
@@ -77,15 +78,15 @@ def _replace_ui_num_element(old_file: str):
 
 # Replace ObjectUtils with Objects
 def resolve_object_util_deprecation(old_file: str):
-    last_change = old_file
+    result = _repeat_replacement(old_file, _replace_object_util_call)
+    result = _repeat_replacement(result, _replace_object_util_import)
+    return result
+
+def _repeat_replacement(last_change, replacement_function: Callable[[str], str]):
     result = last_change
     while result is not None:
         last_change = result
-        result = _replace_object_util_call(last_change)
-    result = last_change
-    while result is not None:
-        last_change = result
-        result = _replace_object_util_import(last_change)
+        result = replacement_function(last_change)
     return last_change
 
 def _replace_object_util_import(old_file: str):
