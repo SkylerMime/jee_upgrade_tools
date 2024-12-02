@@ -4,6 +4,7 @@ Simple script to reformat common problems in legacy JSF codebases
 
 Java:
 - Replaces depreacted ObjectUtils.toString(obj) with Objects.toString(obj, "")
+- Replaces depreacted ObjectUtils.equals(a, b) with Objects.equals(a, b)
 
 Xhtml:
 - Replaces ui-g elements with PrimeFlex p-grid elements

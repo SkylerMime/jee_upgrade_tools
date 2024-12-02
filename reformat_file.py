@@ -78,7 +78,8 @@ def _replace_ui_num_element(old_file: str):
 
 # Replace ObjectUtils with Objects
 def resolve_object_util_deprecation(old_file: str):
-    result = _repeat_replacement(old_file, _replace_object_util_call)
+    result = _repeat_replacement(old_file, _replace_object_util_to_string_call)
+    result = _repeat_replacement(result, _replace_object_util_equals_call)
     result = _repeat_replacement(result, _replace_object_util_import)
     return result
 
@@ -95,9 +96,19 @@ def _replace_object_util_import(old_file: str):
         return None
     return f'{first_part}java.util.Objects{last_part}'
 
-def _replace_object_util_call(old_file: str):
+def _replace_object_util_equals_call(old_file: str):
     """
-    >>> _replace_object_util_call('test.add("First " + ObjectUtils.toString(exampleVariable.method()));')
+    >>> _replace_object_util_equals_call('test.add("First " + ObjectUtils.equals(first, second));')
+    'test.add("First " + Objects.equals(first, second));'
+    """
+    first_part, _, last_part = old_file.partition("ObjectUtils.equals")
+    if last_part == "":
+        return None
+    return f'{first_part}Objects.equals{last_part}'
+
+def _replace_object_util_to_string_call(old_file: str):
+    """
+    >>> _replace_object_util_to_string_call('test.add("First " + ObjectUtils.toString(exampleVariable.method()));')
     'test.add("First " + Objects.toString(exampleVariable.method(), ""));'
     """
     first_part, _, last_part = old_file.partition("org.apache.commons.lang3.ObjectUtils.toString")
