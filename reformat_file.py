@@ -1,4 +1,19 @@
+import sys
 import pathlib
+
+# Run the reformatter on the given file
+def main():
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
+        print(f"Reformatting file {file_path}.")
+        try:
+            reformat_file(file_path)
+            print("Done.")
+        except FileNotFoundError:
+            print(f"fatal: File {file_path} not found.")
+    else:
+        print("Usage: python reformat_file.py file_path.")
+        print("fatal: Missing argument 'file_path'.")
 
 # Reformat the given file according to my rules
 def reformat_file(file_path: str):
@@ -111,3 +126,6 @@ def _split_at_close_parentheses(parentheses_string: str):
             return parentheses_string[:last_right_parenthesis_index + 1], parentheses_string[last_right_parenthesis_index + 1:]
     
     raise AssertionError("Balanced parentheses not found")
+
+if __name__ == "__main__":
+    main()

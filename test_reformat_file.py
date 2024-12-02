@@ -1,5 +1,6 @@
 from reformat_file import resolve_object_util_deprecation, reformat_file
 import pathlib
+import pytest
 
 OBJECT_UTIL_REPEATED = """
 import org.apache.commons.lang3.ObjectUtils;
@@ -98,3 +99,7 @@ def test_nesting_replace():
 
 def test_multi_replace():
     assert resolve_object_util_deprecation(OBJECT_UTIL_REPEATED) == OBJECT_UTIL_REPEATED_EXPECTED
+
+def test_bad_filepath():
+    with pytest.raises(FileNotFoundError):
+        reformat_file("./fakefile.txt")
