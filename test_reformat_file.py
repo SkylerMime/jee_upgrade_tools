@@ -1,4 +1,8 @@
-from reformat_file import resolve_object_util_deprecation, reformat_file
+from reformat_file import (
+    resolve_object_util_deprecation,
+    reformat_file,
+    resolve_raw_tabchange,
+)
 import pathlib
 import pytest
 
@@ -125,3 +129,10 @@ def test_multi_replace():
 def test_bad_filepath():
     with pytest.raises(FileNotFoundError):
         reformat_file("./fakefile.txt")
+
+
+def test_add_generic():
+    assert (
+        resolve_raw_tabchange("public void onTabChange(TabChangeEvent event) {")
+        == "public void onTabChange(TabChangeEvent<?> event) {"
+    )

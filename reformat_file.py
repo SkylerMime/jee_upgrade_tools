@@ -28,12 +28,22 @@ def reformat_file(file_path: str):
             file_data = ui_g_to_p_grid(file_data)
         elif file_path.endswith(".java"):
             file_data = resolve_object_util_deprecation(file_data)
+            file_data = resolve_raw_tabchange(file_data)
 
     file_to_rem = pathlib.Path(file_path)
     file_to_rem.unlink()
 
     with open(file_path, mode="x", encoding="UTF-8") as old_file:
         old_file.write(file_data)
+
+
+def _repeat_replacement(file_to_modify, replacement_function: Callable[[str], str]):
+    last_change = file_to_modify
+    result = last_change
+    while result is not None:
+        last_change = result
+        result = replacement_function(last_change)
+    return last_change
 
 
 # Replace old ui-g style classes
@@ -86,14 +96,6 @@ def resolve_object_util_deprecation(old_file: str):
     result = _repeat_replacement(result, _replace_object_util_equals_call)
     result = _repeat_replacement(result, _replace_object_util_import)
     return result
-
-
-def _repeat_replacement(last_change, replacement_function: Callable[[str], str]):
-    result = last_change
-    while result is not None:
-        last_change = result
-        result = replacement_function(last_change)
-    return last_change
 
 
 def _replace_object_util_import(old_file: str):
@@ -154,6 +156,18 @@ def _split_at_close_parentheses(parentheses_string: str):
             )
 
     raise AssertionError("Balanced parentheses not found")
+
+
+# Replace raw types with parameterized generics
+def resolve_raw_tabchange(old_file: str):
+    return _repeat_replacement(old_file, _replace_raw_tabchange_with_generic)
+
+
+def _replace_raw_tabchange_with_generic(old_file: str):
+    first_part, _, last_part = old_file.partition("TabChangeEvent ")
+    if last_part == "":
+        return None
+    return f"{first_part}TabChangeEvent<?> {last_part}"
 
 
 if __name__ == "__main__":
