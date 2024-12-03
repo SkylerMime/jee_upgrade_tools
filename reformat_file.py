@@ -52,16 +52,10 @@ def ui_g_to_p_grid(old_file: str):
     >>> ui_g_to_p_grid('    <div class="ui-g-12 ui-sm-12 ui-md-8 ui-lg-6 ui-xl-3">')
     '    <div class="p-col-12 p-sm-12 p-md-8 p-lg-6 p-xl-3">'
     """
-    last_change = old_file
-    result = last_change
-    while result is not None:
-        last_change = result
-        result = _replace_ui_g_element(last_change)
-    result = last_change
-    while result is not None:
-        last_change = result
-        result = _replace_ui_num_element(last_change)
-    return last_change
+
+    result = _repeat_replacement(old_file, _replace_ui_g_element)
+    result = _repeat_replacement(result, _replace_ui_num_element)
+    return result
 
 
 def _replace_ui_g_element(old_file: str):
