@@ -2,3 +2,4 @@ __pycache__
 testfiles
 .venv
 .pytest_cache
+.vscode
