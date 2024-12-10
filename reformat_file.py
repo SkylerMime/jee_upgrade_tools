@@ -1,6 +1,46 @@
 import sys
 import pathlib
 from collections.abc import Callable
+from typing import Self
+
+
+class HtmlElement:
+    def __init__(self, full: str) -> None:
+        self.full = full
+
+    def close(self) -> str:
+        """
+        >>> newElem = HtmlElement("<first>")
+        >>> newElem.close()
+        '<first />'
+        """
+        first, _, _ = self.full.partition(">")
+        return f"{first} />"
+
+    def name(self) -> str:
+        """
+        >>> newElem = HtmlElement("<test class='Hello'>")
+        >>> newElem.name()
+        'test'
+
+        >>> newElem = HtmlElement("</test>")
+        >>> newElem.name()
+        'test'
+        """
+        _, _, last = self.full.partition("<")
+        if last[0] == "/":
+            last = last[1:]
+        end_of_name_index = min(last.find(" "), last.find(">"))
+        return last[:end_of_name_index]
+
+    def pairs_with(self, other: Self) -> bool:
+        """
+        >>> firstElem = HtmlElement("<test class='Hello'>")
+        >>> secondElem = HtmlElement("</test>")
+        >>> firstElem.pairs_with(secondElem)
+        True
+        """
+        return self.name() == other.name()
 
 
 # Run the reformatter on the given file
@@ -37,13 +77,13 @@ def reformat_file(file_path: str):
         old_file.write(file_data)
 
 
-def _repeat_replacement(file_to_modify, replacement_function: Callable[[str], str]):
-    last_change = file_to_modify
-    result = last_change
-    while result is not None:
-        last_change = result
-        result = replacement_function(last_change)
-    return last_change
+def _replace_all(file_to_modify, replacement_function: Callable[[str], (str, str)]):
+    remaining = file_to_modify
+    modified_file: str = ""
+    while len(remaining) > 0:
+        changed, remaining = replacement_function(remaining)
+        modified_file += changed
+    return modified_file
 
 
 # Replace old ui-g style classes
@@ -53,42 +93,82 @@ def ui_g_to_p_grid(old_file: str):
     '    <div class="p-col-12 p-sm-12 p-md-8 p-lg-6 p-xl-3">'
     """
 
-    result = _repeat_replacement(old_file, _replace_ui_g_element)
-    result = _repeat_replacement(result, _replace_ui_num_element)
+    result = _replace_all(old_file, _replace_ui_g_element)
+    result = _replace_all(result, _replace_ui_num_element)
     return result
 
 
 def _replace_ui_g_element(old_file: str):
-    """
-    >>> _replace_ui_g_element('<div class="ui-g-8 ui-md-6">')
-    '<div class="p-col-8 ui-md-6">'
-    """
     first_part, _, last_part = old_file.partition("ui-g")
     if last_part == "":
-        return None
+        return first_part, ""
     elif last_part[0] == "-":
         # This is a length element like ui-g-12, not the grid definition ui-g.
-        return f"{first_part}p-col{last_part}"
+        return f"{first_part}p-col", last_part
     else:
-        return f"{first_part}p-grid{last_part}"
+        return f"{first_part}p-grid", last_part
 
 
 def _replace_ui_num_element(old_file: str):
-    """
-    >>> _replace_ui_num_element('<div class="ui-lg-5">')
-    '<div class="p-lg-5">'
-    """
+    replacable_suffixes = {"sm", "md", "lg", "xl"}
     first_part, _, last_part = old_file.partition("ui-")
     if last_part == "":
-        return None
-    return f"{first_part}p-{last_part}"
+        return first_part, ""
+    elif last_part[:2] not in replacable_suffixes:
+        # Don't replace cases like "ui-datatable-sm" and "ui-fluid"
+        return f"{first_part}ui-", last_part
+    else:
+        return f"{first_part}p-", last_part
+
+
+def _shorthand_close_xhtml_element(old_file: str):
+    """
+    >>> _shorthand_close_xhtml_element('<test><newElement class="test"></newElement></test>')
+    '<test><newElement class="test" /></test>'
+    """
+    elements = _html_elements(old_file)
+    for index, element in enumerate(elements):
+        if index + 1 == len(elements):
+            break
+        next_element = elements[index + 1]
+        if element.pairs_with(next_element):
+            first_part, _, last_part = old_file.partition[
+                element.full + next_element.full
+            ]
+            return f"{first_part}{element.close()}{last_part}"
+    return None
+
+
+def _html_elements(old_file: str) -> list[HtmlElement]:
+    """
+    >>> htmlElements = _html_elements("<first></second><third>")
+    >>> htmlElements[0].full
+    '<first>'
+    >>> htmlElements[1].full
+    '</second>'
+    >>> htmlElements[2].full
+    '<third>'
+    """
+    elements = []
+    while len(old_file) > 0:
+        elem_end_index = old_file.find(">")
+        if elem_end_index == -1:
+            return elements
+        elements.append(HtmlElement(old_file[: elem_end_index + 1]))
+        old_file = old_file[elem_end_index + 1]
+    return elements
 
 
 # Replace ObjectUtils with Objects
 def resolve_object_util_deprecation(old_file: str):
-    result = _repeat_replacement(old_file, _replace_object_util_to_string_call)
-    result = _repeat_replacement(result, _replace_object_util_equals_call)
-    result = _repeat_replacement(result, _replace_object_util_import)
+    """
+    >>> resolve_object_util_deprecation('test.add("First " + ObjectUtils.equals(first, second));')
+    'test.add("First " + Objects.equals(first, second));'
+    """
+    result = _replace_all(old_file, _replace_inline_object_util_to_string_call)
+    result = _replace_all(result, _replace_object_util_to_string_call)
+    result = _replace_all(result, _replace_object_util_equals_call)
+    result = _replace_all(result, _replace_object_util_import)
     return result
 
 
@@ -97,35 +177,33 @@ def _replace_object_util_import(old_file: str):
         "org.apache.commons.lang3.ObjectUtils"
     )
     if last_part == "":
-        return None
-    return f"{first_part}java.util.Objects{last_part}"
+        return first_part, ""
+    return f"{first_part}java.util.Objects", last_part
 
 
 def _replace_object_util_equals_call(old_file: str):
-    """
-    >>> _replace_object_util_equals_call('test.add("First " + ObjectUtils.equals(first, second));')
-    'test.add("First " + Objects.equals(first, second));'
-    """
     first_part, _, last_part = old_file.partition("ObjectUtils.equals")
     if last_part == "":
-        return None
-    return f"{first_part}Objects.equals{last_part}"
+        return first_part, ""
+    return f"{first_part}Objects.equals", last_part
 
 
-def _replace_object_util_to_string_call(old_file: str):
-    """
-    >>> _replace_object_util_to_string_call('test.add("First " + ObjectUtils.toString(exampleVariable.method()));')
-    'test.add("First " + Objects.toString(exampleVariable.method(), ""));'
-    """
+def _replace_inline_object_util_to_string_call(old_file: str):
     first_part, _, last_part = old_file.partition(
         "org.apache.commons.lang3.ObjectUtils.toString"
     )
     if last_part == "":
-        first_part, _, last_part = old_file.partition("ObjectUtils.toString")
-        if last_part == "":
-            return None
+        return first_part, ""
     after_objects_before_close, last_close = _split_at_close_parentheses(last_part)
-    return f'{first_part}Objects.toString{after_objects_before_close}, ""{last_close}'
+    return f'{first_part}Objects.toString{after_objects_before_close}, ""', last_close
+
+
+def _replace_object_util_to_string_call(old_file: str):
+    first_part, _, last_part = old_file.partition("ObjectUtils.toString")
+    if last_part == "":
+        return first_part, ""
+    after_objects_before_close, last_close = _split_at_close_parentheses(last_part)
+    return f'{first_part}Objects.toString{after_objects_before_close}, ""', last_close
 
 
 def _split_at_close_parentheses(parentheses_string: str):
@@ -154,14 +232,14 @@ def _split_at_close_parentheses(parentheses_string: str):
 
 # Replace raw types with parameterized generics
 def resolve_raw_tabchange(old_file: str):
-    return _repeat_replacement(old_file, _replace_raw_tabchange_with_generic)
+    return _replace_all(old_file, _replace_raw_tabchange_with_generic)
 
 
 def _replace_raw_tabchange_with_generic(old_file: str):
     first_part, _, last_part = old_file.partition("TabChangeEvent ")
     if last_part == "":
-        return None
-    return f"{first_part}TabChangeEvent<?> {last_part}"
+        return first_part, ""
+    return f"{first_part}TabChangeEvent<?> ", last_part
 
 
 if __name__ == "__main__":

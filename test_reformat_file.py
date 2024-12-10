@@ -2,6 +2,7 @@ from reformat_file import (
     resolve_object_util_deprecation,
     reformat_file,
     resolve_raw_tabchange,
+    ui_g_to_p_grid,
 )
 import pathlib
 import pytest
@@ -12,7 +13,7 @@ import org.apache.commons.lang3.ObjectUtils;
 firstline;
 test.add("First " + ObjectUtils.toString(exampleVariable.method()));
 secondline;
-test.add("First " + org.apache.commons.lang3.ObjectUtils.toString(secondVariable.method(more()).more())).more();
+test.add("Second " + org.apache.commons.lang3.ObjectUtils.toString(secondVariable.method(more()).more())).more();
 """
 
 OBJECT_UTIL_REPEATED_EXPECTED = """
@@ -21,7 +22,7 @@ import java.util.Objects;
 firstline;
 test.add("First " + Objects.toString(exampleVariable.method(), ""));
 secondline;
-test.add("First " + Objects.toString(secondVariable.method(more()).more(), "")).more();
+test.add("Second " + Objects.toString(secondVariable.method(more()).more(), "")).more();
 """
 
 
@@ -119,6 +120,76 @@ def test_nesting_replace():
     )
 
 
+def test_multi_line_replace():
+    OBJECT_UTIL_MULTI_LINE = """
+firstline;
+
+test.add("First " + ObjectUtils.toString(exampleVariable.method()));
+"""
+
+    OBJECT_UTIL_MULTI_LINE_EXPECTED = """
+firstline;
+
+test.add("First " + Objects.toString(exampleVariable.method(), ""));
+"""
+
+    assert (
+        resolve_object_util_deprecation(OBJECT_UTIL_MULTI_LINE)
+        == OBJECT_UTIL_MULTI_LINE_EXPECTED
+    )
+
+
+def test_multi_line_replace_with_imports():
+    OBJECT_UTIL_MULTI_LINE = """
+import org.apache.commons.lang3.ObjectUtils;
+
+firstline;
+test.add("First " + ObjectUtils.toString(exampleVariable.method()));
+secondline;
+"""
+
+    OBJECT_UTIL_MULTI_LINE_EXPECTED = """
+import java.util.Objects;
+
+firstline;
+test.add("First " + Objects.toString(exampleVariable.method(), ""));
+secondline;
+"""
+
+    assert (
+        resolve_object_util_deprecation(OBJECT_UTIL_MULTI_LINE)
+        == OBJECT_UTIL_MULTI_LINE_EXPECTED
+    )
+
+
+def test_two_replacements():
+    OBJECT_UTIL_TWO = """
+test.add(ObjectUtils.toString(first),
+ObjectUtils.toString(second));
+    """
+
+    OBJECT_UTIL_TWO_EXPECTED = """
+test.add(Objects.toString(first, ""),
+Objects.toString(second, ""));
+    """
+
+    assert resolve_object_util_deprecation(OBJECT_UTIL_TWO) == OBJECT_UTIL_TWO_EXPECTED
+
+
+def test_inline_and_regular_replacement():
+    OBJECT_UTIL_TWO = """
+test.add("First " + ObjectUtils.toString(first.method()));
+test.add(org.apache.commons.lang3.ObjectUtils.toString(second.method()));
+"""
+
+    OBJECT_UTIL_TWO_EXPECTED = """
+test.add("First " + Objects.toString(first.method(), ""));
+test.add(Objects.toString(second.method(), ""));
+"""
+
+    assert resolve_object_util_deprecation(OBJECT_UTIL_TWO) == OBJECT_UTIL_TWO_EXPECTED
+
+
 def test_multi_replace():
     assert (
         resolve_object_util_deprecation(OBJECT_UTIL_REPEATED)
@@ -135,4 +206,15 @@ def test_add_generic():
     assert (
         resolve_raw_tabchange("public void onTabChange(TabChangeEvent event) {")
         == "public void onTabChange(TabChangeEvent<?> event) {"
+    )
+
+
+def test_ui_num_replacement_keeps_non_num():
+    assert ui_g_to_p_grid('<div class="ui-fluid">') == '<div class="ui-fluid">'
+
+
+def test_ui_num_replacement_replaces_after_non_num():
+    assert (
+        ui_g_to_p_grid('<div class="ui-fluid ui-sm-4">')
+        == '<div class="ui-fluid p-sm-4">'
     )
