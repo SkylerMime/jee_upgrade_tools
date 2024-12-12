@@ -3,6 +3,8 @@ from reformat_file import (
     reformat_file,
     resolve_raw_tabchange,
     ui_g_to_p_grid,
+    html_elements,
+    shorthand_close_xhtml_elements,
 )
 import pathlib
 import pytest
@@ -62,11 +64,14 @@ def test_reformat_xhtml_file():
     UI_G_TEST_INPUT = """
 <div class="ui-g">
     <div class="ui-g-12 ui-md-12 ui-lg-12 ui-xl-6" style="margin-left:-5px">
+    <button class="ui-fluid">
+    </button>
 """
 
     UI_G_EXPECTED_OUTPUT = """
 <div class="p-grid">
     <div class="p-col-12 p-md-12 p-lg-12 p-xl-6" style="margin-left:-5px">
+    <button class="ui-fluid" />
 """
 
     assert run_reformat_test_on("test.xhtml", UI_G_TEST_INPUT) == UI_G_EXPECTED_OUTPUT
@@ -217,4 +222,45 @@ def test_ui_num_replacement_replaces_after_non_num():
     assert (
         ui_g_to_p_grid('<div class="ui-fluid ui-sm-4">')
         == '<div class="ui-fluid p-sm-4">'
+    )
+
+
+def test_get_html_elements_ignores_whitespace():
+    htmlElements = html_elements("<first>      </first>")
+    assert htmlElements[1].noWhitespace() == "</first>"
+
+
+def test_across_line_shorthand_replacement():
+    assert (
+        shorthand_close_xhtml_elements(
+            """<test><newElement class="test">
+</newElement></test>"""
+        )
+        == """<test><newElement class="test" /></test>"""
+    )
+
+
+def test_whitespace_separated_shorthand_replacement():
+    assert (
+        shorthand_close_xhtml_elements(
+            """<test class="ui-fluid">
+    </test>"""
+        )
+        == '<test class="ui-fluid" />'
+    )
+
+
+def test_two_line_shorthand_replacements():
+    assert (
+        shorthand_close_xhtml_elements(
+            """
+<test><newElement class="test">
+</newElement></test>
+<secondElement></secondElement>
+"""
+        )
+        == """
+<test><newElement class="test" /></test>
+<secondElement />
+"""
     )

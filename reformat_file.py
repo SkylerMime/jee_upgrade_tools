@@ -8,6 +8,14 @@ class HtmlElement:
     def __init__(self, full: str) -> None:
         self.full = full
 
+    def noWhitespace(self) -> str:
+        """
+        >>> newElem = HtmlElement("  \t   <first>")
+        >>> newElem.noWhitespace()
+        '<first>'
+        """
+        return self.full.strip("\n\t\r ")
+
     def close(self) -> str:
         """
         >>> newElem = HtmlElement("<first>")
@@ -16,6 +24,20 @@ class HtmlElement:
         """
         first, _, _ = self.full.partition(">")
         return f"{first} />"
+
+    def isOpen(self) -> bool:
+        return not self.isClose()
+
+    def isClose(self) -> bool:
+        """
+        >>> newElem = HtmlElement("<first>")
+        >>> newElem.isClose()
+        False
+        >>> newElem = HtmlElement("</second>")
+        >>> newElem.isClose()
+        True
+        """
+        return self.noWhitespace().startswith("</")
 
     def name(self) -> str:
         """
@@ -27,7 +49,7 @@ class HtmlElement:
         >>> newElem.name()
         'test'
         """
-        _, _, last = self.full.partition("<")
+        _, _, last = self.noWhitespace().partition("<")
         if last[0] == "/":
             last = last[1:]
         end_of_name_index = min(last.find(" "), last.find(">"))
@@ -40,7 +62,7 @@ class HtmlElement:
         >>> firstElem.pairs_with(secondElem)
         True
         """
-        return self.name() == other.name()
+        return self.name() == other.name() and self.isOpen() and other.isClose()
 
 
 # Run the reformatter on the given file
@@ -66,6 +88,7 @@ def reformat_file(file_path: str):
         file_data = old_file.read()
         if file_path.endswith(".xhtml"):
             file_data = ui_g_to_p_grid(file_data)
+            file_data = shorthand_close_xhtml_elements(file_data)
         elif file_path.endswith(".java"):
             file_data = resolve_object_util_deprecation(file_data)
             file_data = resolve_raw_tabchange(file_data)
@@ -77,7 +100,9 @@ def reformat_file(file_path: str):
         old_file.write(file_data)
 
 
-def _replace_all(file_to_modify, replacement_function: Callable[[str], (str, str)]):
+def _replace_all(
+    file_to_modify, replacement_function: Callable[[str], (str, str)]
+) -> str:
     remaining = file_to_modify
     modified_file: str = ""
     while len(remaining) > 0:
@@ -96,6 +121,16 @@ def ui_g_to_p_grid(old_file: str):
     result = _replace_all(old_file, _replace_ui_g_element)
     result = _replace_all(result, _replace_ui_num_element)
     return result
+
+
+# Close any closable element pairs in one element
+def shorthand_close_xhtml_elements(old_file: str):
+    """
+    >>> shorthand_close_xhtml_elements('<test><newElement class="test"></newElement></test>')
+    '<test><newElement class="test" /></test>'
+    """
+
+    return _replace_all(old_file, _shorthand_close_xhtml_element)
 
 
 def _replace_ui_g_element(old_file: str):
@@ -122,26 +157,22 @@ def _replace_ui_num_element(old_file: str):
 
 
 def _shorthand_close_xhtml_element(old_file: str):
-    """
-    >>> _shorthand_close_xhtml_element('<test><newElement class="test"></newElement></test>')
-    '<test><newElement class="test" /></test>'
-    """
-    elements = _html_elements(old_file)
+    elements = html_elements(old_file)
     for index, element in enumerate(elements):
         if index + 1 == len(elements):
             break
         next_element = elements[index + 1]
         if element.pairs_with(next_element):
-            first_part, _, last_part = old_file.partition[
+            first_part, _, last_part = old_file.partition(
                 element.full + next_element.full
-            ]
-            return f"{first_part}{element.close()}{last_part}"
-    return None
+            )
+            return f"{first_part}{element.close()}", last_part
+    return old_file, ""
 
 
-def _html_elements(old_file: str) -> list[HtmlElement]:
+def html_elements(old_file: str) -> list[HtmlElement]:
     """
-    >>> htmlElements = _html_elements("<first></second><third>")
+    >>> htmlElements = html_elements("<first></second><third>")
     >>> htmlElements[0].full
     '<first>'
     >>> htmlElements[1].full
@@ -154,8 +185,10 @@ def _html_elements(old_file: str) -> list[HtmlElement]:
         elem_end_index = old_file.find(">")
         if elem_end_index == -1:
             return elements
-        elements.append(HtmlElement(old_file[: elem_end_index + 1]))
-        old_file = old_file[elem_end_index + 1]
+        next_element_str = old_file[: elem_end_index + 1]
+        # next_element_str = next_element_str.strip("\t\n\r ")
+        elements.append(HtmlElement(next_element_str))
+        old_file = old_file[elem_end_index + 1 :]
     return elements
 
 
