@@ -69,25 +69,29 @@ class HtmlElement:
 def main():
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
+        full_mode = False
+        if len(sys.argv) > 2:
+            full_mode = sys.argv[2] == "-f" or sys.argv[2] == "--full"
         print(f"Reformatting file {file_path}.")
         try:
-            reformat_file(file_path)
+            reformat_file(file_path, full_mode)
             print("Done.")
         except FileNotFoundError:
             print(f"fatal: File {file_path} not found.")
     else:
-        print("Usage: python reformat_file.py file_path.")
+        print("Usage: python reformat_file.py file_path [-f | --full].")
         print("fatal: Missing argument 'file_path'.")
 
 
 # Reformat the given file according to my rules
-def reformat_file(file_path: str):
+def reformat_file(file_path: str, full_mode: bool = False):
     file_data = ""
 
     with open(file_path, encoding="UTF-8") as old_file:
         file_data = old_file.read()
         if file_path.endswith(".xhtml"):
-            file_data = ui_g_to_p_grid(file_data)
+            if full_mode:
+                file_data = ui_g_to_p_grid(file_data)
             file_data = shorthand_close_xhtml_elements(file_data)
         elif file_path.endswith(".java"):
             file_data = resolve_object_util_deprecation(file_data)

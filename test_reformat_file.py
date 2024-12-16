@@ -28,7 +28,7 @@ test.add("Second " + Objects.toString(secondVariable.method(more()).more(), ""))
 """
 
 
-def run_reformat_test_on(file_name: str, file_data: str):
+def run_reformat_test_on(file_name: str, file_data: str, full_mode: bool = False):
     TEST_FILE_DIRECTORY = "./testfiles"
     TEST_FILE_NAME = file_name
     TEST_FILE_PATH = TEST_FILE_DIRECTORY + "/" + TEST_FILE_NAME
@@ -45,7 +45,7 @@ def run_reformat_test_on(file_name: str, file_data: str):
     with open(TEST_FILE_PATH, mode="x", encoding="UTF-8") as test_file:
         test_file.write(file_data)
 
-    reformat_file(TEST_FILE_PATH)
+    reformat_file(TEST_FILE_PATH, full_mode)
 
     result = ""
     with open(TEST_FILE_PATH, encoding="UTF-8") as test_file:
@@ -74,7 +74,10 @@ def test_reformat_xhtml_file():
     <button class="ui-fluid" />
 """
 
-    assert run_reformat_test_on("test.xhtml", UI_G_TEST_INPUT) == UI_G_EXPECTED_OUTPUT
+    assert (
+        run_reformat_test_on("test.xhtml", UI_G_TEST_INPUT, full_mode=True)
+        == UI_G_EXPECTED_OUTPUT
+    )
 
 
 def test_object_util():
