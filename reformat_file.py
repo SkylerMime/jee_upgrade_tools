@@ -1,5 +1,5 @@
 import sys
-import pathlib
+from pathlib import Path
 from collections.abc import Callable
 from typing import Self
 import re
@@ -69,7 +69,7 @@ class HtmlElement:
 # Run the reformatter on the given file
 def main():
     if len(sys.argv) > 1:
-        file_path = sys.argv[1]
+        file_path = Path(sys.argv[1])
         full_mode = False
         if len(sys.argv) > 2:
             full_mode = sys.argv[2] == "-f" or sys.argv[2] == "--full"
@@ -85,25 +85,34 @@ def main():
 
 
 # Reformat the given file according to my rules
-def reformat_file(file_path: str, full_mode: bool = False):
-    file_data = ""
+def reformat_file(file_path: Path, full_mode: bool = False):
+    file_to_reformat: Path = Path(file_path)
+    if file_to_reformat.is_dir():
+        for nested_file in file_to_reformat.iterdir():
+            reformat_file(nested_file)
+    elif file_to_reformat.is_file():
 
-    with open(file_path, encoding="UTF-8") as old_file:
-        file_data = old_file.read()
-        if file_path.endswith(".xhtml"):
-            if full_mode:
-                file_data = ui_g_to_p_grid(file_data)
-            file_data = shorthand_close_xhtml_elements(file_data)
-        elif file_path.endswith(".java"):
-            file_data = resolve_object_util_deprecation(file_data)
-            file_data = resolve_raw_tabchange(file_data)
-            file_data = resolve_raw_events(file_data)
+        file_data = ""
 
-    file_to_rem = pathlib.Path(file_path)
-    file_to_rem.unlink()
+        with file_path.open(encoding="UTF-8") as old_file:
+            file_data = old_file.read()
+            if file_path.name.endswith(".xhtml"):
+                if full_mode:
+                    file_data = ui_g_to_p_grid(file_data)
+                file_data = shorthand_close_xhtml_elements(file_data)
+            elif file_path.name.endswith(".java"):
+                file_data = resolve_object_util_deprecation(file_data)
+                file_data = resolve_raw_tabchange(file_data)
+                file_data = resolve_raw_events(file_data)
+                file_data = resolve_primitive_constructors(file_data)
 
-    with open(file_path, mode="x", encoding="UTF-8") as old_file:
-        old_file.write(file_data)
+        file_to_rem = Path(file_path)
+        file_to_rem.unlink()
+
+        with file_path.open(mode="x", encoding="UTF-8") as old_file:
+            old_file.write(file_data)
+    elif not file_to_reformat.exists():
+        raise FileNotFoundError()
 
 
 def _replace_all(
@@ -250,23 +259,11 @@ def _split_at_close_parentheses(parentheses_string: str):
     >>> _split_at_close_parentheses("(example()).extra()")
     ('(example()', ').extra()')
     """
-    assert parentheses_string[0] == "("
-    uncanceled_parentheses = 1
-    last_right_parenthesis_index = -1
-    for index, char in enumerate(parentheses_string[1:]):
-        if char == "(":
-            uncanceled_parentheses += 1
-        elif char == ")":
-            uncanceled_parentheses -= 1
-            last_right_parenthesis_index = index
-
-        if uncanceled_parentheses == 0:
-            return (
-                parentheses_string[: last_right_parenthesis_index + 1],
-                parentheses_string[last_right_parenthesis_index + 1 :],
-            )
-
-    raise AssertionError("Balanced parentheses not found")
+    after_parenthesis_index = _locate_close_element(parentheses_string, "(", ")")
+    return (
+        parentheses_string[:after_parenthesis_index],
+        parentheses_string[after_parenthesis_index:],
+    )
 
 
 # Replace raw tabchange types with parameterized generics
@@ -307,20 +304,80 @@ def _replace_raw_event_types_with_generics(old_file: str):
             inner_type, event_var_name = explicit_cast_match.group(1, 2)
 
             method_heading_finder = re.compile(
-                rf"void (\w*?)\({event} {event_var_name}\)"
+                rf"(public|private|protected) void (\w*?)\({event} {event_var_name}\)(\s*?)\u007b"
             )
+
             event_match = method_heading_finder.search(old_file)
             if event_match is not None:
-                method_name = event_match.group(1)
-                method_heading_replacement = (
-                    f"void {method_name}({event}<{inner_type}> {event_var_name})"
-                )
-                old_file = method_heading_finder.sub(
-                    method_heading_replacement, old_file, 1
+                access_level, method_name, whitespace = event_match.group(1, 2, 3)
+                method_heading_replacement = f"{access_level} void {method_name}({event}<{inner_type}> {event_var_name}){whitespace}\u007b"
+
+                # Restrict the file changing area to the end of the method before replacing
+                end_of_method = _end_of_method(event_match, old_file)
+
+                replacable_file = old_file[:end_of_method]
+                remaining_file = old_file[end_of_method:]
+
+                replacable_file = method_heading_finder.sub(
+                    method_heading_replacement, replacable_file, 1
                 )
 
                 explicit_cast_replacement = f"{event_var_name}.getObject()"
-                old_file = explicit_cast_finder.sub(explicit_cast_replacement, old_file)
+                replacable_file = explicit_cast_finder.sub(
+                    explicit_cast_replacement, replacable_file
+                )
+                old_file = replacable_file + remaining_file
+
+    return old_file, ""
+
+
+def _end_of_method(method_heading: re.Match, old_file) -> int:
+    start_of_method = method_heading.end() - 1
+
+    return start_of_method + _locate_close_bracket(old_file[start_of_method:])
+
+
+def _locate_close_bracket(bracket_string: str):
+    r"""
+    >>> _locate_close_bracket("{\nexample('{}', test).extra()\n}")
+    30
+    """
+    return _locate_close_element(bracket_string, "{", "}")
+
+
+def _locate_close_element(string: str, open_element: str, close_element: str):
+    assert string[0] == open_element
+    uncanceled_parentheses = 1
+    last_right_parenthesis_index = -1
+    for index, char in enumerate(string[1:]):
+        if char == open_element:
+            uncanceled_parentheses += 1
+        elif char == close_element:
+            uncanceled_parentheses -= 1
+            last_right_parenthesis_index = index
+
+        if uncanceled_parentheses == 0:
+            return last_right_parenthesis_index + 1
+
+    raise AssertionError("Balanced elements not found")
+
+
+def resolve_primitive_constructors(old_file: str):
+    return _replace_all(old_file, _replace_primitive_constructor)
+
+
+JAVA_PRIMITIVE_WRAPPERS = ["Short", "Long", "Boolean", "Integer"]
+
+
+def _replace_primitive_constructor(old_file: str):
+    for primitive in JAVA_PRIMITIVE_WRAPPERS:
+        primitive_finder = re.compile(rf"new {primitive}\((.*?)\)")
+        primitive_match = primitive_finder.search(old_file)
+        if primitive_match is not None:
+            constructor_parameter = primitive_match.group(1)
+            old_file = primitive_finder.sub(
+                f"{primitive}.valueOf({constructor_parameter})", old_file
+            )
 
     return old_file, ""
 

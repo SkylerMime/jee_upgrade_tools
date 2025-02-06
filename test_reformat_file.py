@@ -1,13 +1,14 @@
 from reformat_file import (
     resolve_object_util_deprecation,
     reformat_file,
+    resolve_primitive_constructors,
     resolve_raw_events,
     resolve_raw_tabchange,
     ui_g_to_p_grid,
     html_elements,
     shorthand_close_xhtml_elements,
 )
-import pathlib
+from pathlib import Path
 import pytest
 
 OBJECT_UTIL_REPEATED = """
@@ -30,20 +31,12 @@ test.add("Second " + Objects.toString(secondVariable.method(more()).more(), ""))
 
 
 def run_reformat_test_on(file_name: str, file_data: str, full_mode: bool = False):
-    TEST_FILE_DIRECTORY = "./testfiles"
-    TEST_FILE_NAME = file_name
-    TEST_FILE_PATH = TEST_FILE_DIRECTORY + "/" + TEST_FILE_NAME
+    TEST_FILE_DIRECTORY = Path("./testfiles")
+    TEST_FILE_PATH = TEST_FILE_DIRECTORY / file_name
 
-    for file_to_remove in pathlib.Path(TEST_FILE_DIRECTORY).iterdir():
-        file_to_remove.unlink()
+    _clear_directory(TEST_FILE_DIRECTORY)
 
-    directory_to_remove = pathlib.Path(TEST_FILE_DIRECTORY)
-    if directory_to_remove.exists():
-        directory_to_remove.rmdir()
-
-    pathlib.Path("./testfiles").mkdir()
-
-    with open(TEST_FILE_PATH, mode="x", encoding="UTF-8") as test_file:
+    with TEST_FILE_PATH.open(mode="x", encoding="UTF-8") as test_file:
         test_file.write(file_data)
 
     reformat_file(TEST_FILE_PATH, full_mode)
@@ -53,6 +46,45 @@ def run_reformat_test_on(file_name: str, file_data: str, full_mode: bool = False
         result = test_file.read()
 
     return result
+
+
+def run_reformat_directory_test(file_data: str):
+    TEST_FILE_DIRECTORY = "./testfiles"
+    TEST_FILE_NAMES = "first.java", "second.java"
+
+    _clear_directory(TEST_FILE_DIRECTORY)
+
+    for file in TEST_FILE_NAMES:
+        file_path = TEST_FILE_DIRECTORY + "/" + file
+        with open(file_path, mode="x", encoding="UTF-8") as test_file:
+            test_file.write(file_data)
+
+    reformat_file(TEST_FILE_DIRECTORY, False)
+
+    result = set()
+    for file in TEST_FILE_NAMES:
+        file_path = TEST_FILE_DIRECTORY + "/" + file
+        with open(file_path, encoding="UTF-8") as test_file:
+            result.add(test_file.read())
+
+    return result
+
+
+def _clear_directory(directory_path: Path):
+    for file_to_remove in Path(directory_path).iterdir():
+        file_to_remove.unlink()
+
+    directory_to_remove = Path(directory_path)
+    if directory_to_remove.exists():
+        directory_to_remove.rmdir()
+
+    Path(directory_path).mkdir()
+
+
+def test_reformat_java_files_in_directory():
+    result = run_reformat_directory_test(OBJECT_UTIL_REPEATED)
+
+    assert result == {OBJECT_UTIL_REPEATED_EXPECTED, OBJECT_UTIL_REPEATED_EXPECTED}
 
 
 def test_reformat_java_file():
@@ -290,3 +322,48 @@ public void myMethod(RowEditEvent<MyType> event)
 """
 
     assert resolve_raw_events(RAW_EVENT) == GENERICS_EVENT
+
+
+def test_multiple_raw_events_should_use_generics():
+    RAW_EVENT = """
+public void myMethod(RowEditEvent event)
+{
+    firstline = firstCall();
+    MyType firstVar = (MyType) event.getObject();
+    secondline();
+    MyType otherVar = (MyType) event.getObject();
+}
+
+public void myMethodTwo(SelectEvent event)
+{
+    thirdline = thirdCall();
+    MyOtherType secondvar = (MyOtherType) event.getObject();
+    fourthline();
+}
+"""
+
+    GENERICS_EVENT = """
+public void myMethod(RowEditEvent<MyType> event)
+{
+    firstline = firstCall();
+    MyType firstVar = event.getObject();
+    secondline();
+    MyType otherVar = event.getObject();
+}
+
+public void myMethodTwo(SelectEvent<MyOtherType> event)
+{
+    thirdline = thirdCall();
+    MyOtherType secondvar = event.getObject();
+    fourthline();
+}
+"""
+
+    assert resolve_raw_events(RAW_EVENT) == GENERICS_EVENT
+
+
+def test_primitives_should_use_value_of():
+    OLD_CONSTRUCTOR = "test() + 8 + new Long(myVal)"
+    NEW_VALUE_OF = "test() + 8 + Long.valueOf(myVal)"
+
+    assert resolve_primitive_constructors(OLD_CONSTRUCTOR) == NEW_VALUE_OF
