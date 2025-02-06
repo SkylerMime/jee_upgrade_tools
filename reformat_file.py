@@ -274,15 +274,23 @@ def resolve_raw_tabchange(old_file: str):
     return _replace_all(old_file, _replace_raw_tabchange_with_generic)
 
 
+# Any events that should be replaced with wildcards, such as "TabChangeEvent<?>"
+WILDCARD_EVENT_TYPES = [
+    "TabChangeEvent",
+    "ScheduleEvent",
+]
+
+
 def _replace_raw_tabchange_with_generic(old_file: str):
-    first_part, _, last_part = old_file.partition("TabChangeEvent ")
-    if last_part == "":
-        return first_part, ""
-    return f"{first_part}TabChangeEvent<?> ", last_part
+    for event in WILDCARD_EVENT_TYPES:
+        first_part, _, last_part = old_file.partition(f"{event} ")
+        if last_part == "":
+            return first_part, ""
+        return f"{first_part}{event}<?> ", last_part
 
 
 def resolve_raw_events(old_file: str):
-    return _replace_all(old_file, _use_generics_on_raw_types)
+    return _replace_all(old_file, _replace_raw_event_types_with_generics)
 
 
 RAW_EVENT_TYPES = [
@@ -291,7 +299,7 @@ RAW_EVENT_TYPES = [
 ]
 
 
-def _use_generics_on_raw_types(old_file: str):
+def _replace_raw_event_types_with_generics(old_file: str):
     for event in RAW_EVENT_TYPES:
         explicit_cast_finder = re.compile(r"\((\w*?)\) (\w*?).getObject\(\)")
         explicit_cast_match = explicit_cast_finder.search(old_file)
