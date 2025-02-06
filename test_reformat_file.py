@@ -250,6 +250,27 @@ def test_add_generic():
     )
 
 
+def test_add_other_generic():
+    assert (
+        resolve_raw_tabchange("public void setEvent(ScheduleEvent event) {")
+        == "public void setEvent(ScheduleEvent<?> event) {"
+    )
+
+
+def test_generic_adds_stay_set():
+    assert (
+        resolve_raw_tabchange("public void setEvent(ScheduleEvent<?> event) {")
+        == "public void setEvent(ScheduleEvent<?> event) {"
+    )
+
+
+def test_dont_add_import_generic():
+    assert (
+        resolve_raw_tabchange("import org.primefaces.model.ScheduleEvent;")
+        == "import org.primefaces.model.ScheduleEvent;"
+    )
+
+
 def test_ui_num_replacement_keeps_non_num():
     assert ui_g_to_p_grid('<div class="ui-fluid">') == '<div class="ui-fluid">'
 
@@ -331,7 +352,7 @@ public void myMethod(RowEditEvent event)
     firstline = firstCall();
     MyType firstVar = (MyType) event.getObject();
     secondline();
-    MyType otherVar = (MyType) event.getObject();
+    MyType otherVar = (MyType)event.getObject();
 }
 
 public void myMethodTwo(SelectEvent event)
@@ -344,6 +365,44 @@ public void myMethodTwo(SelectEvent event)
 
     GENERICS_EVENT = """
 public void myMethod(RowEditEvent<MyType> event)
+{
+    firstline = firstCall();
+    MyType firstVar = event.getObject();
+    secondline();
+    MyType otherVar = event.getObject();
+}
+
+public void myMethodTwo(SelectEvent<MyOtherType> event)
+{
+    thirdline = thirdCall();
+    MyOtherType secondvar = event.getObject();
+    fourthline();
+}
+"""
+
+    assert resolve_raw_events(RAW_EVENT) == GENERICS_EVENT
+
+
+def test_multiple_raw_events_for_same_event_type_should_use_generics():
+    RAW_EVENT = """
+public void myMethod(SelectEvent event)
+{
+    firstline = firstCall();
+    MyType firstVar = (MyType) event.getObject();
+    secondline();
+    MyType otherVar = (MyType) event.getObject();
+}
+
+public void myMethodTwo(SelectEvent event)
+{
+    thirdline = thirdCall();
+    MyOtherType secondvar = (MyOtherType) event.getObject();
+    fourthline();
+}
+"""
+
+    GENERICS_EVENT = """
+public void myMethod(SelectEvent<MyType> event)
 {
     firstline = firstCall();
     MyType firstVar = event.getObject();

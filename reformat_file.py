@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from collections.abc import Callable
-from typing import Self
+from typing import List, Self
 import re
 
 
@@ -279,11 +279,35 @@ WILDCARD_EVENT_TYPES = [
 
 
 def _replace_raw_tabchange_with_generic(old_file: str):
-    for event in WILDCARD_EVENT_TYPES:
-        first_part, _, last_part = old_file.partition(f"{event} ")
-        if last_part == "":
-            return first_part, ""
-        return f"{first_part}{event}<?> ", last_part
+    wildcard_event_options_regex = _get_regex_options_from_list(WILDCARD_EVENT_TYPES)
+
+    # Find events that do not have a wildcard, but should
+    event_finder = re.compile(
+        rf"(private |public |\()({wildcard_event_options_regex})(?!<\?>)"
+    )
+    event_match = event_finder.search(old_file)
+    if event_match is not None:
+        prefix, matched_event = event_match.group(1, 2)
+        end_index = event_match.end() + 1
+        return (
+            event_finder.sub(f"{prefix}{matched_event}<?>", old_file[:end_index], 1),
+            old_file[end_index:],
+        )
+    else:
+        return old_file, ""
+
+
+def _get_regex_options_from_list(options: List[str]):
+    raw_event_options_regex = ""
+    first = True
+    for event in options:
+        if first == True:
+            first = False
+        else:
+            raw_event_options_regex += "|"
+        raw_event_options_regex += event
+
+    return raw_event_options_regex
 
 
 def resolve_raw_events(old_file: str):
@@ -293,42 +317,46 @@ def resolve_raw_events(old_file: str):
 RAW_EVENT_TYPES = [
     "RowEditEvent",
     "SelectEvent",
+    "UnselectEvent",
 ]
 
 
 def _replace_raw_event_types_with_generics(old_file: str):
-    for event in RAW_EVENT_TYPES:
-        explicit_cast_finder = re.compile(r"\((\w*?)\) (\w*?).getObject\(\)")
-        explicit_cast_match = explicit_cast_finder.search(old_file)
-        if explicit_cast_match is not None:
-            inner_type, event_var_name = explicit_cast_match.group(1, 2)
+    replacable_file = old_file
+    remaining_file = ""
 
-            method_heading_finder = re.compile(
-                rf"(public|private|protected) void (\w*?)\({event} {event_var_name}\)(\s*?)\u007b"
+    raw_event_options_regex = _get_regex_options_from_list(RAW_EVENT_TYPES)
+
+    explicit_cast_finder = re.compile(r"\((\w*?)\) ?(\w*?).getObject\(\)")
+    explicit_cast_match = explicit_cast_finder.search(old_file)
+    if explicit_cast_match is not None:
+        inner_type, event_var_name = explicit_cast_match.group(1, 2)
+
+        method_heading_finder = re.compile(
+            rf"(public|private|protected) void (\w*?)\(({raw_event_options_regex}) {event_var_name}\)(\s*?)\u007b"
+        )
+
+        event_match = method_heading_finder.search(old_file)
+        if event_match is not None:
+            access_level, method_name, event, whitespace = event_match.group(1, 2, 3, 4)
+            method_heading_replacement = f"{access_level} void {method_name}({event}<{inner_type}> {event_var_name}){whitespace}\u007b"
+
+            # Restrict the file changing area to the end of the method before replacing
+            end_of_method = _end_of_method(event_match, old_file)
+
+            replacable_file = old_file[:end_of_method]
+            remaining_file = old_file[end_of_method:]
+
+            replacable_file = method_heading_finder.sub(
+                method_heading_replacement, replacable_file, 1
             )
 
-            event_match = method_heading_finder.search(old_file)
-            if event_match is not None:
-                access_level, method_name, whitespace = event_match.group(1, 2, 3)
-                method_heading_replacement = f"{access_level} void {method_name}({event}<{inner_type}> {event_var_name}){whitespace}\u007b"
+            explicit_cast_replacement = f"{event_var_name}.getObject()"
+            replacable_file = explicit_cast_finder.sub(
+                explicit_cast_replacement, replacable_file
+            )
 
-                # Restrict the file changing area to the end of the method before replacing
-                end_of_method = _end_of_method(event_match, old_file)
-
-                replacable_file = old_file[:end_of_method]
-                remaining_file = old_file[end_of_method:]
-
-                replacable_file = method_heading_finder.sub(
-                    method_heading_replacement, replacable_file, 1
-                )
-
-                explicit_cast_replacement = f"{event_var_name}.getObject()"
-                replacable_file = explicit_cast_finder.sub(
-                    explicit_cast_replacement, replacable_file
-                )
-                old_file = replacable_file + remaining_file
-
-    return old_file, ""
+    return replacable_file, remaining_file
 
 
 def _end_of_method(method_heading: re.Match, old_file) -> int:
