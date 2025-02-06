@@ -1,6 +1,7 @@
 from reformat_file import (
     resolve_object_util_deprecation,
     reformat_file,
+    resolve_raw_events,
     resolve_raw_tabchange,
     ui_g_to_p_grid,
     html_elements,
@@ -267,3 +268,25 @@ def test_two_line_shorthand_replacements():
 <secondElement />
 """
     )
+
+
+def test_raw_event_should_use_generic():
+    RAW_EVENT = """
+public void myMethod(RowEditEvent event)
+{
+    firstline = firstCall();
+    MyType firstVar = (MyType) event.getObject();
+    secondline();
+}
+"""
+
+    GENERICS_EVENT = """
+public void myMethod(RowEditEvent<MyType> event)
+{
+    firstline = firstCall();
+    MyType firstVar = event.getObject();
+    secondline();
+}
+"""
+
+    assert resolve_raw_events(RAW_EVENT) == GENERICS_EVENT

@@ -2,6 +2,7 @@ import sys
 import pathlib
 from collections.abc import Callable
 from typing import Self
+import re
 
 
 class HtmlElement:
@@ -96,6 +97,7 @@ def reformat_file(file_path: str, full_mode: bool = False):
         elif file_path.endswith(".java"):
             file_data = resolve_object_util_deprecation(file_data)
             file_data = resolve_raw_tabchange(file_data)
+            file_data = resolve_raw_events(file_data)
 
     file_to_rem = pathlib.Path(file_path)
     file_to_rem.unlink()
@@ -267,7 +269,7 @@ def _split_at_close_parentheses(parentheses_string: str):
     raise AssertionError("Balanced parentheses not found")
 
 
-# Replace raw types with parameterized generics
+# Replace raw tabchange types with parameterized generics
 def resolve_raw_tabchange(old_file: str):
     return _replace_all(old_file, _replace_raw_tabchange_with_generic)
 
@@ -277,6 +279,42 @@ def _replace_raw_tabchange_with_generic(old_file: str):
     if last_part == "":
         return first_part, ""
     return f"{first_part}TabChangeEvent<?> ", last_part
+
+
+def resolve_raw_events(old_file: str):
+    return _replace_all(old_file, _use_generics_on_raw_types)
+
+
+RAW_EVENT_TYPES = [
+    "RowEditEvent",
+    "SelectEvent",
+]
+
+
+def _use_generics_on_raw_types(old_file: str):
+    for event in RAW_EVENT_TYPES:
+        explicit_cast_finder = re.compile(r"\((\w*?)\) (\w*?).getObject\(\)")
+        explicit_cast_match = explicit_cast_finder.search(old_file)
+        if explicit_cast_match is not None:
+            inner_type, event_var_name = explicit_cast_match.group(1, 2)
+
+            method_heading_finder = re.compile(
+                rf"void (\w*?)\({event} {event_var_name}\)"
+            )
+            event_match = method_heading_finder.search(old_file)
+            if event_match is not None:
+                method_name = event_match.group(1)
+                method_heading_replacement = (
+                    f"void {method_name}({event}<{inner_type}> {event_var_name})"
+                )
+                old_file = method_heading_finder.sub(
+                    method_heading_replacement, old_file, 1
+                )
+
+                explicit_cast_replacement = f"{event_var_name}.getObject()"
+                old_file = explicit_cast_finder.sub(explicit_cast_replacement, old_file)
+
+    return old_file, ""
 
 
 if __name__ == "__main__":
