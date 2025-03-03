@@ -105,6 +105,7 @@ def reformat_file(file_path: Path, full_mode: bool = False):
                 file_data = resolve_raw_tabchange(file_data)
                 file_data = resolve_raw_events(file_data)
                 file_data = resolve_primitive_constructors(file_data)
+                file_data = resolve_bigdecimal_constants(file_data)
 
         file_to_rem = Path(file_path)
         file_to_rem.unlink()
