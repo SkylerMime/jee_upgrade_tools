@@ -1,4 +1,5 @@
 from reformat_file import (
+    resolve_bigdecimal_constants,
     resolve_object_util_deprecation,
     reformat_file,
     resolve_primitive_constructors,
@@ -426,3 +427,16 @@ def test_primitives_should_use_value_of():
     NEW_VALUE_OF = "test() + 8 + Long.valueOf(myVal)"
 
     assert resolve_primitive_constructors(OLD_CONSTRUCTOR) == NEW_VALUE_OF
+
+
+def test_bigdecimals_should_use_enum():
+    INT_VERSION = """
+private BigDecimal total = BigDecimal.ZERO.setScale(2, BigDecimal.ROUND_HALF_EVEN);
+private BigDecimal total = BigDecimal.ZERO.setScale(2, BigDecimal.ROUND_UP);
+"""
+    ENUM_VERSION = """
+private BigDecimal total = BigDecimal.ZERO.setScale(2, RoundingMode.ROUND_HALF_EVEN);
+private BigDecimal total = BigDecimal.ZERO.setScale(2, RoundingMode.ROUND_UP);
+"""
+
+    assert resolve_bigdecimal_constants(INT_VERSION) == ENUM_VERSION

@@ -298,6 +298,10 @@ def _replace_raw_tabchange_with_generic(old_file: str):
 
 
 def _get_regex_options_from_list(options: List[str]):
+    """
+    >>> _get_regex_options_from_list(["A","B","C"])
+    'A|B|C'
+    """
     raw_event_options_regex = ""
     first = True
     for event in options:
@@ -408,6 +412,23 @@ def _replace_primitive_constructor(old_file: str):
             )
 
     return old_file, ""
+
+
+def resolve_bigdecimal_constants(old_file: str):
+    BIG_DECIMAL_ROUNDING_MODES = [
+        "ROUND_HALF_EVEN",
+        "ROUND_UP",
+        "ROUND_HALF_UP",
+    ]
+
+    for rounding_mode_option in BIG_DECIMAL_ROUNDING_MODES:
+        bigdecimal_finder = re.compile(rf"BigDecimal\.({rounding_mode_option})")
+        bigdecimal_match = bigdecimal_finder.search(old_file)
+        if bigdecimal_match is not None:
+            rounding_mode = bigdecimal_match.group(1)
+            old_file = bigdecimal_finder.sub(f"RoundingMode.{rounding_mode}", old_file)
+
+    return old_file
 
 
 if __name__ == "__main__":
